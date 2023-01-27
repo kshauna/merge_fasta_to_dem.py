@@ -1,0 +1,58 @@
+import glob
+import os
+from os.path import exists
+import sys
+import numpy as np
+import pandas as pd
+
+dirlist=os.listdir(sys.argv[1])
+
+
+#f = glob.glob("*.xlsx") #grab all excel files
+num_files=len(dirlist) #count number of negatives by using total file count as proxy
+for i in dirlist:
+   # try:
+    if i.endswith("xlsx"):
+        excel = pd.read_excel(os.path.join(sys.argv[1],i), 'Demultiplexing sheet', engine="openpyxl", keep_default_na=False,converters={'Specimen-code-number':str}) #xlrd not well supported hence use openpyxl
+        excel['Specimen-code-number']=excel['Specimen-code-number'].map(str) #change zrc number from int to str (prevent loss of leading zeros)
+   #     excel['Specimen-code-number'] = excel['Specimen-code-number'].apply(lambda x: x.zfill(7)) #add back leading zeros up to 7 characters total.
+        excel.to_csv(os.path.join(sys.argv[1],i)+'.csv', index=False) #change to csv
+    
+os.system("cat "+sys.argv[1]+"/*.csv > "+sys.argv[1]+"_merged.csv")
+
+sequencedict={}
+with open(sys.argv[2]+"_dups",'w') as outfile:
+    with open(sys.argv[2],'r') as infile:
+        l=infile.readlines()
+        for i,j in enumerate(l):
+            if ">" in j:
+                sequenceid=j.split("_")[1]
+                if sequenceid not in sequencedict.keys():
+                    sequencedict[sequenceid]=l[i+1].strip()
+                else:
+                    outfile.write(j+l[i+1])
+                    print(sequenceid + " duplicated")
+                
+            
+    print (len(l)/2,len(sequencedict)) 
+         
+dem_specidlist=[]
+
+with open(sys.argv[1]+"_merged_output.csv",'w') as outfile:
+    with open(sys.argv[1]+"_merged.csv",'r') as infile:
+        l=infile.readlines()
+        outfile.write(l[0].strip()+",Sequence,Sequencing Date\n")
+        for line in l:
+            if "Position" not in line:
+                m=line.strip().split(',')
+                specimenid=m[2]+m[3]
+                dem_specidlist.append(specimenid)
+                try:
+                    outfile.write(line.strip()+','+sequencedict[specimenid]+','+sys.argv[3]+'\n')
+                except KeyError:
+                    outfile.write(line.strip()+',,'+sys.argv[3]+'\n')
+
+
+unassoc=list(set(sequencedict.keys())-set(dem_specidlist))
+with open(sys.argv[1]+"remaining.txt",'w') as outfile:
+    outfile.write("\n".join(unassoc))
